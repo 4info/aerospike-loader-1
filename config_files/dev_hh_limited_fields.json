@@ -1,0 +1,39 @@
+{
+  "version" : "1.0",
+  "input_type" : "csv",
+  "csv_style": { "delimiter": "|" , "n_columns_datafile": 20, "ignore_first_line": true},
+
+  "key": {"column_name":"did", "type": "string"},
+  "set" : "dh",
+
+  "binlist": [
+    {"name": "fs",
+      "value": {"column_name": "fs", "type" : "string"}
+    },
+    {"name": "ls",
+      "value": {"column_name": "ls", "type" : "string"}
+    },
+    {"name": "nh",
+      "value": {"column_name": "nh", "type" : "integer"}
+    },
+    {"name": "lah",
+      "value": {"column_name": "lah", "type" : "string"}
+    },
+    {"name": "idm",
+      "value": {"column_name": "idm", "type" : "integer"}
+    },
+    {"name": "hh",
+      "value": {"column_name": "hh", "type" : "string"}
+    },
+    {"name": "ta",
+      "value": {"column_name": "ta", "type" : "integer"}
+    },
+    {"name": "tb",
+      "value": {"column_name": "tb", "type" : "integer"}
+    },
+    {"name": "tc",
+      "value": {"column_name": "tc", "type" : "integer"}
+    }
+  ]
+
+}
