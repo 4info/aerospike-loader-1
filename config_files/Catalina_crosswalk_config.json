@@ -1,0 +1,26 @@
+{
+  "version": "2.0",
+  "dsv_config": {
+    "delimiter": "|",
+    "n_columns_datafile": 2,
+    "header_exist": true
+  },
+  "mappings": [
+    {
+      "key": {
+        "column_name": "hhid",
+        "type": "string"
+      },
+      "set": "ch",
+      "bin_list": [
+        {
+          "name": "val",
+          "value": {
+            "column_name": "Catalina_FSID",
+            "type": "string"
+          }
+        }
+      ]
+    }
+  ]
+}
