@@ -37,6 +37,7 @@ import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import com.aerospike.load.hs.UploadHouseHoldData;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
 import org.apache.commons.cli.HelpFormatter;
@@ -56,10 +57,10 @@ import com.aerospike.client.policy.TlsPolicy;
 import com.aerospike.client.util.Util;
 
 /**
- * This is the main class for the Aerospike import. 
- * 
+ * This is the main class for the Aerospike import.
+ *
  * It will import multiple Data Dump files concurrently
- * 
+ *
  * To run: java -jar aerospike-import-<version> <options> <file names>
  * The options are:
  * -h,--hosts <arg>      			List of seed hosts (default: localhost)
@@ -81,7 +82,7 @@ import com.aerospike.client.util.Util;
  * -uk,--send-user-key              Send user defined key in addition to hash digest to store on the server. (default: userKey is not sent to reduce meta-data overhead)
  * -u,--usage           			Print usage.
  * -v,--verbose						Verbose mode for debug logging (default: INFO)
- * The file names can be a series of file names or directories. 
+ * The file names can be a series of file names or directories.
  *
  * @author Aerospike
  *
@@ -90,21 +91,21 @@ public class AerospikeLoad implements Runnable {
 
 	private AerospikeClient 	client;
 	private String				fileName;
-	
+
 	// Config related variable
 	private static ExecutorService	writerPool;
 	private static int				nWriterThreads;
 	private static int				nReaderThreads;
-	
+
 	private static final int		scaleFactor = 5;
 	private static String 			DEFAULT_DELIMITER = ",";
 	private static String 			DEFAULT_HEADER_EXIST = "false";
-	
+
 	// Other variables.
 	private static Parameters 		params;
 	private static Counter 			counters;
 	private static Thread 			statPrinter;
-	
+
 	// Data definition related variable
 	private static HashMap<String, String>	dsvConfigs;
 	private static List<MappingDefinition>	mappingDefs;
@@ -131,7 +132,7 @@ public class AerospikeLoad implements Runnable {
 		AerospikeClient client = null;
 		counters = new Counter();
 		CommandLine cl;
-		
+
 		try {
 			Options options = new Options();
 			options.addOption("h", "hosts", true,
@@ -140,10 +141,10 @@ public class AerospikeLoad implements Runnable {
 					"The tlsname is only used when connecting with a secure TLS enabled server. " +
 					"If the port is not specified, the default port is used.\n" +
 					"IPv6 addresses must be enclosed in square brackets.\n" +
-					"Default: localhost\n" + 
-					"Examples:\n" + 
-					"host1\n" + 
-					"host1:3000,host2:3000\n" + 
+					"Default: localhost\n" +
+					"Examples:\n" +
+					"host1\n" +
+					"host1:3000,host2:3000\n" +
 					"192.168.1.10:cert1:3000,[2001::1111]:cert2:3000\n"
 					);
 			options.addOption("V", "version", false, "Aerospike Loader Version");
@@ -151,6 +152,7 @@ public class AerospikeLoad implements Runnable {
 			options.addOption("U", "user", true, "User name");
 			options.addOption("P", "password", true, "Password");
 			options.addOption("n", "namespace", true, "Namespace (default: test)");
+			options.addOption("s","set", true, "Aerospike Set Name");
 			options.addOption("c", "config", true, "Column definition file name");
 			options.addOption("g", "max-throughput", true, "It limit numer of writes/sec in aerospike.");
 			options.addOption("T", "transaction-timeout", true, "write transaction timeout in milliseconds(default: No timeout)");
@@ -164,17 +166,17 @@ public class AerospikeLoad implements Runnable {
 			options.addOption("ec", "abort-error-count", true, "Error count to abort (default: 0)");
 			options.addOption("wa", "write-action", true, "Write action if key already exists (default: update)");
 			options.addOption("tls", "tls-enable", false, "Use TLS/SSL sockets");
-			options.addOption("tp", "tls-protocols", true, 
+			options.addOption("tp", "tls-protocols", true,
 					"Allow TLS protocols\n" +
 					"Values:  TLSv1,TLSv1.1,TLSv1.2 separated by comma\n" +
 					"Default: TLSv1.2"
 					);
-			options.addOption("tlsCiphers", "tls-cipher-suite", true, 
+			options.addOption("tlsCiphers", "tls-cipher-suite", true,
 					"Allow TLS cipher suites\n" +
 					"Values:  cipher names defined by JVM separated by comma\n" +
 					"Default: null (default cipher list provided by JVM)"
 					);
-			options.addOption("tr", "tlsRevoke", true, 
+			options.addOption("tr", "tlsRevoke", true,
 					"Revoke certificates identified by their serial number\n" +
 					"Values:  serial numbers separated by comma\n" +
 					"Default: null (Do not revoke certificates)"
@@ -183,7 +185,7 @@ public class AerospikeLoad implements Runnable {
 			options.addOption("tlsLoginOnly", false, "Use TLS/SSL sockets on node login only");
 			options.addOption("auth", true, "Authentication mode. Values: " + Arrays.toString(AuthMode.values()));
 
-			options.addOption("uk", "send-user-key", false, 
+			options.addOption("uk", "send-user-key", false,
 					"Send user defined key in addition to hash digest to store on the server. (default: userKey is not sent to reduce meta-data overhead)"
 					);
 			options.addOption("v", "verbose", false, "Logging all");
@@ -191,7 +193,7 @@ public class AerospikeLoad implements Runnable {
 
 			CommandLineParser parser = new PosixParser();
 			cl = parser.parse(options, args, false);
-	        
+
 			if (args.length == 0 || cl.hasOption("u")) {
 				printUsage(options);
 				return;
@@ -210,24 +212,30 @@ public class AerospikeLoad implements Runnable {
 		}
 
 		try {
-			statPrinter = new Thread(new PrintStat(counters));
 			// Create Abstract derived params from provided commandline params.
 			params = Utils.parseParameters(cl);
 			if (params.verbose) {
 				Configurator.setAllLevels(LogManager.getRootLogger().getName(), Level.DEBUG);
 			}
-			
+
 			// Get and validate user roles for client.
 			client = getAerospikeClient(cl);
 			if (client == null) {
 				return;
 			}
-			
-			initReadWriteThreadCnt(cl);
-						
+
 			List<String> dataFileNames = new ArrayList<String>();
 			initDataFileNameList(cl, dataFileNames);
 			if (dataFileNames.size() == 0) {
+				return;
+			}
+
+			String setName = cl.getOptionValue("s");
+			if("dd".equals(setName)) {
+				int port = Integer.parseInt(cl.getOptionValue("p", "3000"));
+				UploadHouseHoldData uploadHouseHoldData = new UploadHouseHoldData(params.namespace,
+						params.hosts, "dd", port, dataFileNames);
+				uploadHouseHoldData.startUpload();
 				return;
 			}
 
@@ -235,11 +243,14 @@ public class AerospikeLoad implements Runnable {
 			String columnDefinitionFileName = cl.getOptionValue("c", null);
 			dataFileNames.remove(columnDefinitionFileName);
 			log.info("Number of data files:" + dataFileNames.size());
-			
+
 			initBytesToRead(dataFileNames);
 
 			log.info("Aerospike loader started");
 			// Perform main Read Write job.
+
+			statPrinter = new Thread(new PrintStat(counters));
+			initReadWriteThreadCnt(cl);
 			runLoader(client, columnDefinitionFileName, dataFileNames);
 
 		} catch (Exception e) {
@@ -249,7 +260,9 @@ public class AerospikeLoad implements Runnable {
 			}
 		} finally {
 			// Stop statistic printer thread.
-			statPrinter.interrupt();
+			if(statPrinter!=null) {
+				statPrinter.interrupt();
+			}
 			log.info("Aerospike loader completed");
 			if (client != null) {
 				client.close();
@@ -259,12 +272,12 @@ public class AerospikeLoad implements Runnable {
 		long processStop = System.currentTimeMillis();
 		log.info(String.format("Loader completed in %.3fsec", (float) (processStop - processStart) / 1000));
 	}
-	
+
 	private static AerospikeClient getAerospikeClient(CommandLine cl) {
-		ClientPolicy clientPolicy = new ClientPolicy();	
-		
+		ClientPolicy clientPolicy = new ClientPolicy();
+
 		initClientPolicy(cl, clientPolicy);
-		
+
 		AerospikeClient client = new AerospikeClient(clientPolicy, params.hosts);
 
 		if (!client.isConnected()) {
@@ -288,7 +301,7 @@ public class AerospikeLoad implements Runnable {
 
 		if (cl.hasOption("auth")) {
 			clientPolicy.authMode = AuthMode.valueOf(cl.getOptionValue("auth", "").toUpperCase());
-		}				
+		}
 		// Setting user, password in client policy.
 		clientPolicy.user = cl.getOptionValue("user");
 		clientPolicy.password = cl.getOptionValue("password");
@@ -329,7 +342,7 @@ public class AerospikeLoad implements Runnable {
 		}
 
 	}
-	
+
 	private static void initReadWriteThreadCnt(CommandLine cl) {
 		// Get available processors to calculate default number of threads.
 		int cpus = Runtime.getRuntime().availableProcessors();
@@ -344,19 +357,19 @@ public class AerospikeLoad implements Runnable {
 				? (nReaderThreads > Constants.MAX_THREADS ? Constants.MAX_THREADS : nReaderThreads) : 1);
 		log.debug("Using reader Threads: " + nReaderThreads);
 	}
-	
+
 	private static void initDataFileNameList(CommandLine cl, List<String> dataFileNames) {
 		// Get data file list.
 		String[] dataFiles = cl.getArgs();
-		
+
 		// Get data filename list.
 		if (dataFiles.length == 0) {
 			log.error("No data file Specified: add <file/dir name> to end of the command");
 			return;
 		}
-		
+
 		dataFileNames.addAll(Utils.getFileNames(dataFiles));
-		
+
 		if (dataFileNames.size() == 0) {
 			log.error("Given datafiles/directory does not exist Files: " + dataFileNames.toString());
 			return;
@@ -378,10 +391,10 @@ public class AerospikeLoad implements Runnable {
 		 * mapping definition(key, set, binlist)
 		 */
 		File columnDefinitionFile = getColumnDefinitionFile(columnDefinitionFileName);
-		
+
 		dsvConfigs = new HashMap<String, String>();
 		mappingDefs = new ArrayList<MappingDefinition>();
-		
+
 		if (Parser.parseJSONColumnDefinitions(columnDefinitionFile, dsvConfigs, mappingDefs)) {
 			log.info("Config file processed.");
 		} else {
@@ -399,14 +412,14 @@ public class AerospikeLoad implements Runnable {
 		validateMappingDefs();
 
 		statPrinter.start();
-		
+
 		// writerPool is global as it will be used outside.
 		writerPool = Executors.newFixedThreadPool(nWriterThreads);
 
 		ExecutorService readerPool = Executors.newFixedThreadPool(nReaderThreads > dataFileNames.size()
 										? dataFileNames.size() : nReaderThreads);
 		log.info("Reader pool size : " + nReaderThreads);
-		
+
 		// Read write process start from this point.
 		counters.write.writeStartTime = System.currentTimeMillis();
 
@@ -415,18 +428,18 @@ public class AerospikeLoad implements Runnable {
 			log.debug("Submitting task for: " + aFile);
 			readerPool.submit(new AerospikeLoad(aFile, client));
 		}
-		
+
 		// Wait for reader pool to complete.
 		readerPool.shutdown();
 		log.info("Shutdown reader thread pool");
-		
+
 		while(!readerPool.isTerminated());
 		log.info("Reader thread pool terminated");
-		
+
 		// Wait for writer pool to complete after getting all tasks from reader pool.
 		writerPool.shutdown();
 		log.info("Shutdown writer thread pool");
-		
+
 		while(!writerPool.isTerminated());
 		log.info("Writer thread pool terminated");
 
@@ -515,7 +528,7 @@ public class AerospikeLoad implements Runnable {
 			}
 		}
 
-		// Throw exception if n_column defined in columndef file doesn't match n_columns in datafile. 
+		// Throw exception if n_column defined in columndef file doesn't match n_columns in datafile.
 		if (columnNames != null && (columnNames.size() != Integer.parseInt(dsvConfigs.get(Constants.N_COLUMN)))) {
 			throw new Exception("Number of column in config file and datafile are mismatch." + " Datafile: "
 					+ Utils.getFileName(dataFileNames.get(0)) + " columns: " + columnNames.toString() + " Configfile: "
@@ -540,7 +553,7 @@ public class AerospikeLoad implements Runnable {
 					throw new Exception("Missing column name " + columnDef.columnName + " in data file header.");
 				}
 			}
-		} 
+		}
 
 		if (dsvHasHeader()) {
 			columnDef.columnName = columnNames.get(columnDef.columnPos);
@@ -553,7 +566,7 @@ public class AerospikeLoad implements Runnable {
 
 			// KEY
 			if (mappingDef.keyColumnDef == null) {
-				throw new Exception ("Mapping definition without key mapping");	
+				throw new Exception ("Mapping definition without key mapping");
 			}
 			updateColumnInfo(mappingDef.keyColumnDef.nameDef, columnNames);
 
@@ -618,11 +631,11 @@ public class AerospikeLoad implements Runnable {
 	}
 
 	private static void validateSetNameInfo(MetaDefinition metadataColDef) throws Exception {
-		
+
 		if ((metadataColDef.staticName != null && metadataColDef.staticName.length() > Constants.SET_NAME_LENGTH)) {
 			throw new Exception("Set name len exceed Allowd limit. SET_NAME_LEN_MAX: " + Constants.SET_NAME_LENGTH + "Given SetName: " + metadataColDef.staticName);
 		}
-		
+
 		if (metadataColDef.staticName != null) {
 			return;
 		}
@@ -639,7 +652,7 @@ public class AerospikeLoad implements Runnable {
 	}
 
 	private static void validateKeyNameInfo(MetaDefinition metadataColDef) throws Exception {
-		
+
 		if (metadataColDef.nameDef.columnPos < 0 && (metadataColDef.nameDef.columnName == null)) {
 			throw new Exception("Information missing(columnName, columnPos) in config file: " + metadataColDef);
 		}
@@ -653,7 +666,7 @@ public class AerospikeLoad implements Runnable {
 		if ((binColumnDef.staticName != null && binColumnDef.staticName.length() > Constants.BIN_NAME_LENGTH)) {
 			throw new Exception("Bin name len exceed Allowd limit. BIN_NAME_LEN_MAX: " + Constants.BIN_NAME_LENGTH + "Given BinName: " + binColumnDef.staticName);
 		}
-		
+
 		if (binColumnDef.staticName != null) {
 			return;
 		}
@@ -699,7 +712,7 @@ public class AerospikeLoad implements Runnable {
 			throw new Exception("Wrong encoding for blob data:" + binColumnDef);
 		}
 	}
-	
+
 	/*
 	 * Write help/usage to console.
 	 */
@@ -770,7 +783,7 @@ public class AerospikeLoad implements Runnable {
 						writerPool.submit(new AsWriterTask(fileName, lineNumber, (line.length() + 1),  this.client, columns,
 								dsvConfigs, mappingDef, params, counters));
 					}
-					
+
 					log.trace("Submitting line " + lineNumber + " in file: " + Utils.getFileName(fileName));
 					counters.write.readCount.incrementAndGet();
 				}
@@ -790,7 +803,7 @@ public class AerospikeLoad implements Runnable {
 		log.info(String.format("Reader completed %d-lines in %.3fsec, From file: %s", lineNumber,
 				(float) (stop - start) / 1000, Utils.getFileName(fileName)));
 	}
-	
+
 	public void run() {
 		log.info("Processing: " + Utils.getFileName(fileName));
 
