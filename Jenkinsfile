@@ -8,6 +8,8 @@ node('jenkinsb-qa-slave-10') {
                 checkout scm
             }
            stage("Build Aerospike Loader"){
+                env.JAVA_HOME="${tool 'Java_Jenkins_OpenJDK11'}"
+                env.PATH="${env.JAVA_HOME}/bin:${env.PATH}"
                 sh 'java -version'
                 sh 'mvn clean install -DskipTests'
                sh 'cp /home/jenkins/.m2/repository/com/aerospike/aerospike-load/2.3.6/aerospike-load-2.3.6-jar-with-dependencies.jar .'
