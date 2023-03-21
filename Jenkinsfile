@@ -10,12 +10,13 @@ node('jenkinsb-qa-slave-10') {
            stage("Build Aerospike Loader"){
                 sh 'java -version'
                 sh 'mvn clean install -DskipTests'
+               sh 'cp /home/jenkins/.m2/repository/com/aerospike/aerospike-load/2.3.6/aerospike-load-2.3.6-jar-with-dependencies.jar .'
             }
 
            stage("Archive Artifacts"){
-                archiveArtifacts artifacts: '/home/jenkins/.m2/repository/com/aerospike/aerospike-load/2.3.6/aerospike-load-2.3.6-jar-with-dependencies.jar', fingerprint: true
-                stash includes: 'target/creative-audit.jar,configuration.tar.gz', name: 'Build_Artifacts', useDefaultExcludes: false
-                sh 'gsutil cp /home/jenkins/.m2/repository/com/aerospike/aerospike-load/2.3.6/aerospike-load-2.3.6-jar-with-dependencies.jar gs://rtb-qa-4info-jenkins/jenkins-04/aerospike-load/aerospike-load-2.3.6-jar-with-dependencies.jar' 
+                archiveArtifacts artifacts: 'target/aerospike-load-2.3.6-jar-with-dependencies.jar', fingerprint: true
+                stash includes: 'target/aerospike-load-2.3.6-jar-with-dependencies.jar', name: 'Build_Artifacts', useDefaultExcludes: false
+                sh 'gsutil cp target/aerospike-load-2.3.6-jar-with-dependencies.jar gs://rtb-qa-4info-jenkins/jenkins-04/aerospike-load/aerospike-load-2.3.6-jar-with-dependencies.jar' 
            }
 
         }
