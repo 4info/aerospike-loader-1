@@ -10,7 +10,6 @@ node('jenkinsb-qa-slave-10') {
            stage("Build Aerospike Loader"){
                 sh 'java -version'
                 sh 'mvn clean install -DskipTests'
-                }
             }
 
            stage("Archive Artifacts"){
