@@ -234,7 +234,7 @@ public class AerospikeLoad implements Runnable {
 			if("hs".equals(setName)) {
 				int port = Integer.parseInt(cl.getOptionValue("p", "3000"));
 				UploadHouseHoldData uploadHouseHoldData = new UploadHouseHoldData(params.namespace,
-						params.hosts, "dd", port, dataFileNames);
+						params.hosts, setName, port, dataFileNames);
 				uploadHouseHoldData.startUpload();
 				return;
 			}
