@@ -159,7 +159,8 @@ public class UploadHouseHoldData {
         // Find number of lines/records in the file
         final File file = new File(fileName);
         final LineNumberReader lineNumberReader = new LineNumberReader(new FileReader(file));
-        lineNumberReader.skip(Long.MAX_VALUE);
+        while ((lineNumberReader.readLine()) != null)
+            ;
         int lines = lineNumberReader.getLineNumber();
         lineNumberReader.close();
         return lines - 1; // minus 1 to skip the header line
